@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MediQueue — Smart OPD Queue</title>
+<style>
+:root{--navy:#102d40;--teal:#20b99a;--paper:#f4f7f8;--ink:#193344}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 system-ui, sans-serif}
+header{background:var(--navy);color:white;padding:26px max(5vw,20px)}header h1{margin:0;font-size:2rem}header p{margin:4px 0;color:#b9d4df}
+main{max-width:1100px;margin:28px auto;padding:0 18px}.notice{background:#fff4d6;border-left:4px solid #d79b18;padding:12px 16px;border-radius:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:20px}.card{background:white;border:1px solid #dce6e9;border-radius:14px;padding:20px;box-shadow:0 3px 12px #1733440a}
+h2{margin-top:0;font-size:1.2rem}label{display:block;margin:12px 0 5px;font-weight:600}input,select{width:100%;padding:10px;border:1px solid #c8d7dd;border-radius:8px;font:inherit}
+button{margin-top:14px;background:var(--teal);border:0;border-radius:8px;padding:11px 15px;font-weight:700;color:#062c2a;cursor:pointer}button:hover{filter:brightness(.96)}
+.result{margin-top:14px;padding:12px;background:#e4f7f2;border-radius:8px;white-space:pre-wrap}.muted{color:#617986;font-size:.9rem}
+.statgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.stat{padding:12px;background:#eff7f7;border-radius:9px}.stat strong{display:block;font-size:1.5rem}
+table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:8px;border-bottom:1px solid #e1e9eb}footer{text-align:center;padding:25px;color:#617986}
+</style></head>
+<body>
+<header><h1>🩺 MediQueue</h1><p>Smart outpatient appointment booking & live token status</p></header>
+<main>
+<div class="notice"><strong>Demo environment:</strong> all seeded records are synthetic. Do not enter real patient or medical information.</div>
+<div class="grid">
+<section class="card"><h2>Book an OPD appointment</h2>
+<form id="booking">
+<label for="patient">Demo patient name</label><input id="patient" required minlength="2" maxlength="100" placeholder="e.g. Demo Patient">
+<label for="contact">Demo contact</label><input id="contact" required placeholder="demo@example.test">
+<label for="department">Department</label><select id="department" required></select>
+<label for="doctor">Doctor</label><select id="doctor" required></select>
+<label for="date">Appointment date</label><input id="date" type="date" required>
+<button type="submit">Book token</button></form><div id="bookingResult" class="result" hidden></div>
+</section>
+<section class="card"><h2>Queue status</h2><p class="muted">Look up your token after booking.</p>
+<label for="appointmentId">Appointment ID</label><input id="appointmentId" type="number" min="1" placeholder="e.g. 1">
+<button id="lookup">Check token</button><div id="lookupResult" class="result" hidden></div>
+<h2 style="margin-top:24px">Staff demo summary</h2><div id="summary" class="statgrid">Loading…</div>
+</section>
+<section class="card"><h2>Live queue</h2><label for="queueDepartment">Filter department</label><select id="queueDepartment"><option value="">All departments</option></select>
+<button id="refreshQueue">Refresh queue</button><div id="queueTable" style="overflow:auto;margin-top:12px"></div>
+</section>
+</div>
+<p class="muted">Educational prototype · API docs at <a href="/docs">/docs</a> · Not for clinical use.</p>
+</main><footer>MediQueue · Cloud Computing Mini Project</footer>
+<script>
+const $=id=>document.getElementById(id);
+async function api(path,opts={}){const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});const data=await r.json();if(!r.ok)throw new Error(data.detail||'Request failed');return data}
+function show(id,msg){$(id).hidden=false;$(id).textContent=msg}
+async function loadDepartments(){const ds=await api('/api/departments');for(const d of ds){$('department').add(new Option(d.name,d.id));$('queueDepartment').add(new Option(d.name,d.id))}await loadDoctors();$('department').onchange=loadDoctors}
+async function loadDoctors(){const docs=await api('/api/doctors?department_id='+$('department').value);$('doctor').replaceChildren(...docs.map(d=>new Option(d.name,d.id)))}
+async function loadSummary(){const s=await api('/api/staff/summary');$('summary').innerHTML=[['Appointments',s.total_appointments],['Waiting',s.waiting],['In consultation',s.in_consultation],['Completed',s.completed]].map(([k,v])=>`<div class="stat"><span>${k}</span><strong>${v}</strong></div>`).join('')}
+async function refreshQueue(){try{const dep=$('queueDepartment').value;const q=await api('/api/queue?appointment_date='+new Date().toISOString().slice(0,10)+(dep?'&department_id='+dep:''));$('queueTable').innerHTML=q.length?'<table><thead><tr><th>Token</th><th>Patient</th><th>Status</th></tr></thead><tbody>'+q.map(a=>`<tr><td>${a.token_number}</td><td>${a.patient_name}</td><td>${a.status}</td></tr>`).join('')+'</tbody></table>':'<p class="muted">No active queue for today. Seeded demo appointments are for tomorrow.</p>'}catch(e){show('queueTable',e.message)}}
+$('booking').onsubmit=async e=>{e.preventDefault();try{const a=await api('/api/appointments',{method:'POST',body:JSON.stringify({patient_name:$('patient').value,patient_contact:$('contact').value,department_id:+$('department').value,doctor_id:+$('doctor').value,appointment_date:$('date').value})});show('bookingResult',`Booking confirmed!\\nAppointment ID: ${a.id}\\nToken: ${a.token_number}\\nStatus: ${a.status}\\nEstimated wait: ${a.estimated_wait_minutes} minutes`);$('appointmentId').value=a.id;await loadSummary()}catch(err){show('bookingResult','Could not book: '+err.message)}};
+$('lookup').onclick=async()=>{try{const a=await api('/api/appointments/'+$('appointmentId').value);show('lookupResult',`Appointment #${a.id}\\nToken: ${a.token_number}\\nDate: ${a.appointment_date}\\nStatus: ${a.status}\\nPeople ahead: ${a.people_ahead}\\nEstimated wait: ${a.estimated_wait_minutes} minutes`)}catch(e){show('lookupResult',e.message)}};
+$('refreshQueue').onclick=refreshQueue;
+(async()=>{const d=new Date();d.setDate(d.getDate()+1);$('date').value=d.toISOString().slice(0,10);$('date').min=new Date().toISOString().slice(0,10);try{await loadDepartments();await loadSummary();await refreshQueue()}catch(e){console.error(e)}})();
+</script></body></html>
