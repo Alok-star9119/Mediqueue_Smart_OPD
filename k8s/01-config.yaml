@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mediqueue-config
+  namespace: mediqueue
+data:
+  APP_ENV: "production-demo"
+  DEMO_SEED: "true"
+  DATABASE_URL: "postgresql+psycopg://mediqueue:CHANGE_ME_DEMO_ONLY@postgres:5432/mediqueue"

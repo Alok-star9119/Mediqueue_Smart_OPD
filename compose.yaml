@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: mediqueue
+      POSTGRES_USER: mediqueue
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mediqueue_dev_password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mediqueue -d mediqueue"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://mediqueue:${POSTGRES_PASSWORD:-mediqueue_dev_password}@db:5432/mediqueue
+      APP_ENV: ${APP_ENV:-development}
+      DEMO_SEED: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  pgdata:
